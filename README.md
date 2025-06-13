@@ -1,6 +1,6 @@
 # Area Reduction Through Folding for Ultra-low Latency DNN Implementations on FPGAs
 
-This final-year thesis builds upon the existing work of NeuraLUT. The goal is to achieve further area reduction by implementing folding techniques. The methods, along with their corresponding folders and models in `src/neuralut`, are described below.
+This final-year thesis builds upon the existing work of NeuraLUT. The goal is to achieve further area reduction by implementing folding techniques. The methods, along with their corresponding folders in `src/neuralut` and models in `dataset/jet_substructure` or `dataset/mnist` are described below. Note that vertical folding's method 2 with different sparsity is not tested on mnist dataset so mnist doesn't have the corresponding model file. 
 
 ## Vertical Folding
 
