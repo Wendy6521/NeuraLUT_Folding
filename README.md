@@ -1,3 +1,61 @@
+# Area Reduction Through Folding for Ultra-low Latency DNN Implementations on FPGAs
+
+This final-year thesis builds upon the existing work of NeuraLUT. The goal is to achieve further area reduction by implementing folding techniques. The methods, along with their corresponding folders and models in `src/neuralut`, are described below.
+
+## Vertical Folding
+
+- **Method 1**: Folding multiple layers with different LUT functions and sparsity  
+  *(File: `models.py`, Folder: `method1`)*
+
+- **Method 2 (Naive)**: Folding multiple layers with the same LUT function and sparsity by skipping the second layer  
+  *(File: `models.py`, Folder: `method2_naive`)*
+
+- **Method 2 (Final)**: Folding multiple layers with the same LUT function and sparsity for hidden layers. This method achieves reasonable accuracy and generalizes across all models  
+  *(File: `models_fold_ver.py`, Folder: `method2_fold_final`)*
+
+- **Method 2 (Different Sparsity)**: Folding multiple layers with the same LUT function but different sparsity for hidden layers  
+  *(File: `models_fold_diff_mask.py`, Folder: `method2_fold_diff_mask`)*
+
+## Horizontal Folding
+
+- **Method 1**: Folding a single layer by restricting the sparsity pattern  
+  *(File: `models_fold_hor.py`, Folder: `method1_hor_imask`)*
+
+- **Method 2**: Folding a single layer by reusing neurons  
+  *(File: `models_fold_hor_share.py`, Folder: `method2_hor_share`)*
+
+---
+
+## How to Run
+
+1. **Clone the Repository**  
+   Clone this repository and follow the NeuraLUT installation instructions for setup.
+
+2. **Switch to Desired Folding Method**  
+   Navigate to `NeuraLUT_Folding/src/neuralut`.  
+   Replace `nn.py` and `verilog.py` with the files from the folder of the chosen folding method.
+   Then install it to update
+   ```bash
+   pip install -r requirements.txt
+   cd NeuraLUT_Folding
+   pip install .
+   ```
+
+4. **Train the Model**  
+   - Copy the corresponding model file into `models.py`.
+   - Run training with:  
+     ```bash
+     python train.py --arch <arch_name> --hidden_layers <layers> --checkpoint <save_path>
+     ```
+     Alternatively, modify parameters directly in `train.py`.
+
+5. **Generate Verilog**  
+   After training, the model with the best test accuracy is saved to the specified path.  
+   To generate Verilog, run:  
+   ```bash
+   python neq2lut.py
+   ```
+
 # NeuraLUT: Hiding Neural Network Density in Boolean Synthesizable Functions
 
 [![DOI](https://img.shields.io/badge/DOI-10.1109/FPL64840.2024.00028-orange)](https://doi.org/10.1109/FPL64840.2024.00028)
