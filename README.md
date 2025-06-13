@@ -55,7 +55,7 @@ This final-year thesis builds upon the existing work of NeuraLUT. The goal is to
    ```bash
    python neq2lut.py
    ```
-and specify the output directory.
+   and specify the output directory.
 
 Refer to the README in each dataset folder for more detailed instructions on training and Verilog generation.
 
