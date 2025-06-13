@@ -114,6 +114,13 @@ if __name__ == "__main__":
         help="Width of sub-network(N) (default: %(default)s)",
     )
     parser.add_argument(
+        "--folding_factor",
+        type=int,
+        default=None,
+        metavar="",
+        help="Folding factor for hidden layers (default: %(default)s)",
+    )
+    parser.add_argument(
         "--dataset-file",
         type=str,
         default="data/processed-pythia82-lhc13-all-pt1-50k-r1_h022_e0175_t220_nonu_truth.z",
@@ -171,7 +178,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--cuda",
         action="store_true",
-        default=False,
+        default=True,
         help="Train on a GPU (default: %(default)s)",
     )
     args = parser.parse_args()
@@ -186,7 +193,7 @@ if __name__ == "__main__":
 
     if not os.path.exists(config["log_dir"]):
         os.makedirs(config["log_dir"])
-    
+
     # Split up configuration options to be more understandable
     model_cfg = {}
     for k in model_config.keys():
@@ -241,7 +248,6 @@ if __name__ == "__main__":
     if options_cfg["cuda"]:
         lut_model.cuda()
     lut_model.load_state_dict(checkpoint['model_dict'])
-
     # Generate the truth tables in the LUT module
     print("Converting to NEQs to LUTs...")
     generate_truth_tables(lut_model, verbose=True)
@@ -252,17 +258,18 @@ if __name__ == "__main__":
     lut_accuracy = test(lut_model, test_loader, cuda=options_cfg["cuda"])
     print("LUT-Based Model accuracy: %f" % (lut_accuracy))
     modelSave = {"model_dict": lut_model.state_dict(), "test_accuracy": lut_accuracy}
+    # modelSave = {"model_dict": model.state_dict(), "test_accuracy": lut_accuracy}
 
     torch.save(modelSave, options_cfg["log_dir"] + "/lut_based_model.pth")
     print("Generating verilog in %s..." % (options_cfg["log_dir"]))
     module_list_to_verilog_module(
         lut_model.module_list,
+        # model.module_list,
         "neuralut",
         options_cfg["log_dir"],
         add_registers=options_cfg["add_registers"],
     )
     print("Top level entity stored at: %s/neuralut.v ..." % (options_cfg["log_dir"]))
-
     io_filename = None
 
     print("Running inference simulation of Verilog-based model...")
@@ -272,5 +279,6 @@ if __name__ == "__main__":
     print("Verilog-Based Model accuracy: %f" % (verilog_accuracy))
 
     print("Running out-of-context synthesis")
-    ret = synthesize_and_get_resource_counts(options_cfg["log_dir"], "neuralut", fpga_part='xcvu9p-flgb2104-2-i', clk_period_ns='1.1', post_synthesis=1)
+    # ret = synthesize_and_get_resource_counts(options_cfg["log_dir"], "neuralut", fpga_part='xcvu9p-flgb2104-2-i', clk_period_ns='1', post_synthesis=1, abs_verilog_dir=options_cfg["log_dir"])
+    ret = synthesize_and_get_resource_counts(options_cfg["log_dir"], "neuralut", fpga_part='xcvu9p-flgb2104-2-i', clk_period_ns='1', post_synthesis=1)
     print("Max f: " + str(ret))

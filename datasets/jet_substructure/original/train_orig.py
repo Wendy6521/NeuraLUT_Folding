@@ -36,7 +36,7 @@ from models import JetSubstructureNeqModel
 
 configs = {
     "jsc-2l": {
-        "hidden_layers": [128, 128, 64],
+        "hidden_layers": [32],
         "input_bitwidth": 4,
         "hidden_bitwidth": 4,
         "output_bitwidth": 4,
@@ -44,7 +44,6 @@ configs = {
         "hidden_fanin": 3,
         "output_fanin": 3,
         "width_n": 8,
-        "folding_factor": 2,
         "weight_decay": 0,
         "batch_size": 1024,
         "epochs": 1000,
@@ -53,7 +52,7 @@ configs = {
         "checkpoint": None,
     },
     "jsc-5l": {
-        "hidden_layers": [64, 64, 64],
+        "hidden_layers": [128, 128, 128, 64],
         "input_bitwidth": 7,
         "hidden_bitwidth": 4,
         "output_bitwidth": 4,
@@ -61,7 +60,6 @@ configs = {
         "hidden_fanin": 3,
         "output_fanin": 3,
         "width_n": 16,
-        "folding_factor": 1,
         "weight_decay": 0,
         "batch_size": 1024,
         "epochs": 1000,
@@ -81,7 +79,6 @@ model_config = {
     "hidden_fanin": None,
     "output_fanin": None,
     "width_n": None,
-    "folding_factor": None,
 }
 
 training_config = {
@@ -193,7 +190,7 @@ def train(model, datasets, train_cfg, options):
         test_accuracy = test(model, test_loader, options["cuda"])
         modelSave = {
             "model_dict": model.state_dict(),
-            "optim_dict": optimizer.state_dict(),  # add optimizer1
+            "optim_dict": optimizer.state_dict(),
             "val_accuracy": val_accuracy,
             "test_accuracy": test_accuracy,
             "epoch": epoch,
@@ -223,7 +220,6 @@ def test(model, dataset_loader, cuda):
         output = model(data)
         pred = output.detach().max(1, keepdim=True)[1]
         target_label = torch.max(target.detach(), 1, keepdim=True)[1]
-        # target_label = target_label.to(pred.device)
         if cuda:
             pred = pred.cuda()
         curCorrect = pred.eq(target_label).long().sum()
@@ -274,7 +270,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--cuda",
         action="store_true",
-        default=True,
+        default=False,
         help="Train on a GPU (default: %(default)s)",
     )
     parser.add_argument(
@@ -375,13 +371,6 @@ if __name__ == "__main__":
         metavar="", 
         help="Device_id for GPU",
     )
-    parser.add_argument(
-        "--folding_factor",
-        type=int,
-        default=None,
-        metavar="",
-        help="Folding factor for hidden layers (default: %(default)s)",
-    )
     args = parser.parse_args()
     defaults = configs[args.arch]
     options = vars(args)
@@ -457,7 +446,6 @@ if __name__ == "__main__":
             "hidden_fanin": model_cfg["hidden_fanin"],
             "output_fanin": model_cfg["output_fanin"],
             "width_n": model_cfg["width_n"],
-            "folding_factor": model_cfg["folding_factor"],
             "weight_decay": train_cfg["weight_decay"],
             "batch_size": train_cfg["batch_size"],
             "epochs": train_cfg["epochs"],

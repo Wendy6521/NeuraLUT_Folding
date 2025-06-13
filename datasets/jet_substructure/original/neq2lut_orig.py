@@ -1,5 +1,5 @@
 #  This file is part of NeuraLUT.
-#  
+#
 #  NeuraLUT is a derivative work based on LogicNets,
 #  which is licensed under the Apache License 2.0.
 
@@ -24,7 +24,6 @@ import torch
 import random
 import numpy as np
 from torch.utils.data import DataLoader
-from torchvision import datasets, transforms
 
 from neuralut.nn import (
     generate_truth_tables,
@@ -32,8 +31,9 @@ from neuralut.nn import (
     module_list_to_verilog_module,
 )
 
-from train import configs, model_config, test
-from models import MnistNeqModel, MnistLutModel
+from train import configs, model_config, dataset_config, test
+from dataset import JetSubstructureDataset
+from models import JetSubstructureNeqModel, JetSubstructureLutModel
 from neuralut.synthesis import synthesize_and_get_resource_counts
 
 other_options = {
@@ -42,7 +42,7 @@ other_options = {
     "device": 1,
     "log_dir": None,
     "checkpoint": None,
-    "add_registers": False
+    "add_registers": False,
 }
 
 if __name__ == "__main__":
@@ -53,7 +53,7 @@ if __name__ == "__main__":
         "--arch",
         type=str,
         choices=configs.keys(),
-        default="hdr-5l",
+        default="jsc-s",
         help="Specific the neural network model to use (default: %(default)s)",
     )
     parser.add_argument(
@@ -114,18 +114,22 @@ if __name__ == "__main__":
         help="Width of sub-network(N) (default: %(default)s)",
     )
     parser.add_argument(
-        "--folding_factor",
-        type=int,
-        default=None,
-        metavar="",
-        help="Folding factor for hidden layers (default: %(default)s)",
+        "--dataset-file",
+        type=str,
+        default="data/processed-pythia82-lhc13-all-pt1-50k-r1_h022_e0175_t220_nonu_truth.z",
+        help="The file to use as the dataset input (default: %(default)s)",
     )
-
     parser.add_argument(
         "--clock-period",
         type=float,
         default=1.0,
         help="Target clock frequency to use during Vivado synthesis (default: %(default)s)",
+    )
+    parser.add_argument(
+        "--dataset-config",
+        type=str,
+        default="config/yaml_IP_OP_config.yml",
+        help="The file to use to configure the input dataset (default: %(default)s)",
     )
     parser.add_argument(
         "--dataset-split",
@@ -167,7 +171,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--cuda",
         action="store_true",
-        default=True,
+        default=False,
         help="Train on a GPU (default: %(default)s)",
     )
     args = parser.parse_args()
@@ -182,14 +186,16 @@ if __name__ == "__main__":
 
     if not os.path.exists(config["log_dir"]):
         os.makedirs(config["log_dir"])
-
+    
     # Split up configuration options to be more understandable
     model_cfg = {}
     for k in model_config.keys():
         model_cfg[k] = config[k]
+    dataset_cfg = {}
+    for k in dataset_config.keys():
+        dataset_cfg[k] = config[k]
     options_cfg = {}
     for k in other_options.keys():
-
         options_cfg[k] = config[k]
     model_cfg["cuda"] = options_cfg["cuda"]
     # Set random seeds
@@ -205,25 +211,20 @@ if __name__ == "__main__":
 
     # Fetch the test set
     dataset = {}
-    dataset[args.dataset_split] = datasets.MNIST(
-        "mnist_data",
-        download=False,
-        train=False,
-        transform=transforms.Compose(
-            [
-                transforms.ToTensor(),  # first, convert image to PyTorch tensor
-                transforms.Normalize((0.1307,), (0.3081,)),  # normalize inputs
-            ]
-        ),
+    dataset[args.dataset_split] = JetSubstructureDataset(
+        dataset_cfg["dataset_file"],
+        dataset_cfg["dataset_config"],
+        split=args.dataset_split,
     )
     test_loader = DataLoader(
         dataset[args.dataset_split], batch_size=config["batch_size"], shuffle=False
     )
 
     # Instantiate the PyTorch model
-    model_cfg["input_length"] = 784
-    model_cfg["output_length"] = 10
-    model = MnistNeqModel(model_cfg)
+    x, y = dataset[args.dataset_split][0]
+    model_cfg["input_length"] = len(x)
+    model_cfg["output_length"] = len(y)
+    model = JetSubstructureNeqModel(model_cfg)
     if options_cfg["cuda"]:
         model.cuda()
 
@@ -236,7 +237,7 @@ if __name__ == "__main__":
     baseline_accuracy = test(model, test_loader, cuda=options_cfg["cuda"])
     print("Baseline accuracy: %f" % (baseline_accuracy))
 
-    lut_model = MnistLutModel(model_cfg)
+    lut_model = JetSubstructureLutModel(model_cfg)
     if options_cfg["cuda"]:
         lut_model.cuda()
     lut_model.load_state_dict(checkpoint['model_dict'])
@@ -269,3 +270,7 @@ if __name__ == "__main__":
     print("Testing Verilog-Based Model")
     verilog_accuracy = test(lut_model, test_loader, cuda=options_cfg["cuda"])
     print("Verilog-Based Model accuracy: %f" % (verilog_accuracy))
+
+    print("Running out-of-context synthesis")
+    ret = synthesize_and_get_resource_counts(options_cfg["log_dir"], "neuralut", fpga_part='xcvu9p-flgb2104-2-i', clk_period_ns='1.1', post_synthesis=1)
+    print("Max f: " + str(ret))

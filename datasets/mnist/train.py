@@ -44,6 +44,7 @@ configs = {
         "hidden_fanin": 6,
         "output_fanin": 6,
         "width_n": 16,
+        "folding_factor": 2,
         "weight_decay": 0,
         "batch_size": 128,
         "epochs": 500,
@@ -63,6 +64,7 @@ model_config = {
     "hidden_fanin": None,
     "output_fanin": None,
     "width_n": None,
+    "folding_factor": None,
 }
 
 training_config = {
@@ -287,7 +289,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--cuda",
         action="store_true",
-        default=False,
+        default=True,
         help="Train on a GPU (default: %(default)s)",
     )
     parser.add_argument(
@@ -375,6 +377,13 @@ if __name__ == "__main__":
         metavar="", 
         help="Device_id for GPU",
     )
+    parser.add_argument(
+        "--folding_factor",
+        type=int,
+        default=None,
+        metavar="",
+        help="Folding factor for hidden layers (default: %(default)s)",
+    )
     args = parser.parse_args()
     defaults = configs[args.arch]
     options = vars(args)
@@ -384,7 +393,7 @@ if __name__ == "__main__":
         config[k] = (
             options[k] if options[k] is not None else defaults[k]
         )  # Override defaults, if specified.
-    
+
     if not os.path.exists("test_" + config["log_dir"]):
         os.makedirs("test_" + config["log_dir"])
 
@@ -422,7 +431,7 @@ if __name__ == "__main__":
     # start a new wandb run to track this script
     wandb.init(
         # set the wandb project where this run will be logged
-        project="NeuraLUT",
+        project="NeuraLUT_mnist",
         # track hyperparameters and run metadata
         config={
             "hidden_layers": model_cfg["hidden_layers"],
@@ -433,6 +442,7 @@ if __name__ == "__main__":
             "hidden_fanin": model_cfg["hidden_fanin"],
             "output_fanin": model_cfg["output_fanin"],
             "width_n": model_cfg["width_n"],
+            "folding_factor": model_cfg["folding_factor"],
             "weight_decay": train_cfg["weight_decay"],
             "batch_size": train_cfg["batch_size"],
             "epochs": train_cfg["epochs"],

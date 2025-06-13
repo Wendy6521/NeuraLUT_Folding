@@ -1,5 +1,5 @@
 #  This file is part of NeuraLUT.
-#
+#  
 #  NeuraLUT is a derivative work based on LogicNets,
 #  which is licensed under the Apache License 2.0.
 
@@ -31,42 +31,24 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 
-from dataset import JetSubstructureDataset
-from models import JetSubstructureNeqModel
+from torchvision import datasets, transforms
+from models import MnistNeqModel
 
 configs = {
-    "jsc-2l": {
-        "hidden_layers": [128, 128, 64],
-        "input_bitwidth": 4,
-        "hidden_bitwidth": 4,
-        "output_bitwidth": 4,
-        "input_fanin": 3,
-        "hidden_fanin": 3,
-        "output_fanin": 3,
-        "width_n": 8,
-        "folding_factor": 2,
-        "weight_decay": 0,
-        "batch_size": 1024,
-        "epochs": 1000,
-        "learning_rate": 1e-3,
-        "seed": 8766,
-        "checkpoint": None,
-    },
-    "jsc-5l": {
-        "hidden_layers": [64, 64, 64],
-        "input_bitwidth": 7,
-        "hidden_bitwidth": 4,
-        "output_bitwidth": 4,
-        "input_fanin": 2,
-        "hidden_fanin": 3,
-        "output_fanin": 3,
+    "hdr-5l": {
+        "hidden_layers": [256, 100, 100, 100],
+        "input_bitwidth": 2,
+        "hidden_bitwidth": 2,
+        "output_bitwidth": 2,
+        "input_fanin": 6,
+        "hidden_fanin": 6,
+        "output_fanin": 6,
         "width_n": 16,
-        "folding_factor": 1,
         "weight_decay": 0,
-        "batch_size": 1024,
-        "epochs": 1000,
-        "learning_rate": 1e-3,
-        "seed": 312846,
+        "batch_size": 128,
+        "epochs": 500,
+        "learning_rate": 0.003,
+        "seed": 8971561,
         "checkpoint": None,
     },
 }
@@ -81,7 +63,6 @@ model_config = {
     "hidden_fanin": None,
     "output_fanin": None,
     "width_n": None,
-    "folding_factor": None,
 }
 
 training_config = {
@@ -92,11 +73,6 @@ training_config = {
     "seed": None,
 }
 
-dataset_config = {
-    "dataset_file": None,
-    "dataset_config": None,
-}
-
 other_options = {
     "cuda": None,
     "log_dir": None,
@@ -105,16 +81,49 @@ other_options = {
 }
 
 
-def train(model, datasets, train_cfg, options):
+def train(model, train_cfg, options):
     # Create data loaders for training and inference:
     train_loader = DataLoader(
-        datasets["train"], batch_size=train_cfg["batch_size"], shuffle=True
+        datasets.MNIST(
+            "mnist_data",
+            download=False,
+            train=True,
+            transform=transforms.Compose(
+                [transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))]
+            ),
+        ),
+        batch_size=train_cfg["batch_size"],
+        shuffle=True,
     )
     val_loader = DataLoader(
-        datasets["valid"], batch_size=train_cfg["batch_size"], shuffle=False
+        datasets.MNIST(
+            "mnist_data",
+            download=False,
+            train=True,
+            transform=transforms.Compose(
+                [
+                    transforms.ToTensor(),  # first, convert image to PyTorch tensor
+                    transforms.Normalize((0.1307,), (0.3081,)),  # normalize inputs
+                ]
+            ),
+        ),
+        batch_size=train_cfg["batch_size"],
+        shuffle=False,
     )
     test_loader = DataLoader(
-        datasets["test"], batch_size=train_cfg["batch_size"], shuffle=False
+        datasets.MNIST(
+            "mnist_data",
+            download=False,
+            train=False,
+            transform=transforms.Compose(
+                [
+                    transforms.ToTensor(),  # first, convert image to PyTorch tensor
+                    transforms.Normalize((0.1307,), (0.3081,)),  # normalize inputs
+                ]
+            ),
+        ),
+        batch_size=train_cfg["batch_size"],
+        shuffle=False,
     )
 
     # Configure optimizer
@@ -163,6 +172,7 @@ def train(model, datasets, train_cfg, options):
     if options["cuda"]:
         model.cuda()
 
+
     # Main training loop
     maxAcc = 0.0
     num_epochs = train_cfg["epochs"]
@@ -175,6 +185,8 @@ def train(model, datasets, train_cfg, options):
             if options["cuda"]:
                 data, target = data.cuda(), target.cuda()
             optimizer.zero_grad()
+            data = data.reshape(-1, 784)
+            target = torch.nn.functional.one_hot(target, num_classes=10)
             output = model(data)
             loss = criterion(output, torch.max(target, 1)[1])
             pred = output.detach().max(1, keepdim=True)[1]
@@ -193,7 +205,7 @@ def train(model, datasets, train_cfg, options):
         test_accuracy = test(model, test_loader, options["cuda"])
         modelSave = {
             "model_dict": model.state_dict(),
-            "optim_dict": optimizer.state_dict(),  # add optimizer1
+            "optim_dict": optimizer.state_dict(),
             "val_accuracy": val_accuracy,
             "test_accuracy": test_accuracy,
             "epoch": epoch,
@@ -220,12 +232,13 @@ def test(model, dataset_loader, cuda):
     for batch_idx, (data, target) in enumerate(dataset_loader):
         if cuda:
             data, target = data.cuda(), target.cuda()
+        data = data.reshape(-1, 784)
+        target = torch.nn.functional.one_hot(target, num_classes=10)
         output = model(data)
         pred = output.detach().max(1, keepdim=True)[1]
-        target_label = torch.max(target.detach(), 1, keepdim=True)[1]
-        # target_label = target_label.to(pred.device)
         if cuda:
             pred = pred.cuda()
+        target_label = torch.max(target.detach(), 1, keepdim=True)[1]
         curCorrect = pred.eq(target_label).long().sum()
         curAcc = 100.0 * curCorrect / len(data)
         correct += curCorrect
@@ -239,7 +252,7 @@ if __name__ == "__main__":
         "--arch",
         type=str,
         choices=configs.keys(),
-        default="jsc-2l",
+        default="hdr-5l",
         metavar="",
         help="Specific the neural network model to use (default: %(default)s)",
     )
@@ -274,7 +287,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--cuda",
         action="store_true",
-        default=True,
+        default=False,
         help="Train on a GPU (default: %(default)s)",
     )
     parser.add_argument(
@@ -345,21 +358,8 @@ if __name__ == "__main__":
         "--log_dir",
         type=str,
         default="0",
+        metavar="",
         help="A location to store the log output of the training run and the output model (default: %(default)s)",
-    )
-    parser.add_argument(
-        "--dataset_file",
-        type=str,
-        default="data/processed-pythia82-lhc13-all-pt1-50k-r1_h022_e0175_t220_nonu_truth.z",
-        metavar="",
-        help="The file to use as the dataset input (default: %(default)s)",
-    )
-    parser.add_argument(
-        "--dataset_config",
-        type=str,
-        default="config/yaml_IP_OP_config.yml",
-        metavar="",
-        help="The file to use to configure the input dataset (default: %(default)s)",
     )
     parser.add_argument(
         "--checkpoint",
@@ -375,13 +375,6 @@ if __name__ == "__main__":
         metavar="", 
         help="Device_id for GPU",
     )
-    parser.add_argument(
-        "--folding_factor",
-        type=int,
-        default=None,
-        metavar="",
-        help="Folding factor for hidden layers (default: %(default)s)",
-    )
     args = parser.parse_args()
     defaults = configs[args.arch]
     options = vars(args)
@@ -391,7 +384,7 @@ if __name__ == "__main__":
         config[k] = (
             options[k] if options[k] is not None else defaults[k]
         )  # Override defaults, if specified.
-
+    
     if not os.path.exists("test_" + config["log_dir"]):
         os.makedirs("test_" + config["log_dir"])
 
@@ -402,14 +395,10 @@ if __name__ == "__main__":
     train_cfg = {}
     for k in training_config.keys():
         train_cfg[k] = config[k]
-    dataset_cfg = {}
-    for k in dataset_config.keys():
-        dataset_cfg[k] = config[k]
     options_cfg = {}
     for k in other_options.keys():
         options_cfg[k] = config[k]
     model_cfg["cuda"] = options_cfg["cuda"]
-
     # Set random seeds
     random.seed(train_cfg["seed"])
     np.random.seed(train_cfg["seed"])
@@ -420,24 +409,11 @@ if __name__ == "__main__":
         torch.backends.cudnn.deterministic = True
         torch.cuda.set_device(options_cfg["device"])
 
-    # Fetch the datasets
-    dataset = {}
-    dataset["train"] = JetSubstructureDataset(
-        dataset_cfg["dataset_file"], dataset_cfg["dataset_config"], split="train"
-    )
-    dataset["valid"] = JetSubstructureDataset(
-        dataset_cfg["dataset_file"], dataset_cfg["dataset_config"], split="train"
-    )  # This dataset is so small, we'll just use the training set as the validation set, otherwise we may have too few trainings examples to converge.
-    dataset["test"] = JetSubstructureDataset(
-        dataset_cfg["dataset_file"], dataset_cfg["dataset_config"], split="test"
-    )
-
     # Instantiate model
 
-    x, y = dataset["train"][0]
-    model_cfg["input_length"] = len(x)
-    model_cfg["output_length"] = len(y)
-    model = JetSubstructureNeqModel(model_cfg)
+    model_cfg["input_length"] = 784
+    model_cfg["output_length"] = 10
+    model = MnistNeqModel(model_cfg)
     if options_cfg["checkpoint"] is not None:
         print(f"Loading pre-trained checkpoint {options_cfg['checkpoint']}")
         checkpoint = torch.load(options_cfg["checkpoint"], map_location="cpu")
@@ -457,13 +433,12 @@ if __name__ == "__main__":
             "hidden_fanin": model_cfg["hidden_fanin"],
             "output_fanin": model_cfg["output_fanin"],
             "width_n": model_cfg["width_n"],
-            "folding_factor": model_cfg["folding_factor"],
             "weight_decay": train_cfg["weight_decay"],
             "batch_size": train_cfg["batch_size"],
             "epochs": train_cfg["epochs"],
             "learning_rate": train_cfg["learning_rate"],
             "seed": train_cfg["seed"],
-            "dataset": "jsc",
+            "dataset": "mnist",
         },
     )
 
@@ -472,5 +447,5 @@ if __name__ == "__main__":
     wandb.define_metric("Valid Acc(%)", summary="max")
     wandb.define_metric("Train Loss(%)", summary="min")
     wandb.watch(model, log_freq=10)
-    train(model, dataset, train_cfg, options_cfg)
+    train(model, train_cfg, options_cfg)
     wandb.finish()
